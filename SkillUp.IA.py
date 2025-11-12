@@ -63,12 +63,11 @@ def validar_data_nascimento(data_str):
         return False
 
 def formatar_data(data_str):
-
     try:
         dia, mes, ano = map(int, data_str.split("/"))
         return f"{dia:02d}/{mes:02d}/{ano}"
     except:
-        return data_str  # se falhar, retorna como veio
+        return data_str
 
 def validar_cpf(cpf):
     return cpf.isdigit() and len(cpf) == 11
@@ -84,7 +83,7 @@ def cadastrar_usuario():
             continue
 
         data_nascimento = input("Data de nascimento (DD/MM/AAAA): ").strip()
-        data_nascimento = formatar_data(data_nascimento)  # <-- Formata automaticamente
+        data_nascimento = formatar_data(data_nascimento)
         if not validar_data_nascimento(data_nascimento):
             continue
 
@@ -155,34 +154,36 @@ def menu_inicial():
 # ----------------------------------------------------------
 # Obtendo Tendências de Emprego (API)
 
-def obter_tendencias_emprego():
+def obter_tendencias_emprego(profissao, pais):
     url = "https://jsearch.p.rapidapi.com/search"
     querystring = {
-        "query": "developer jobs in chicago",
+        "query": f"{profissao} jobs",
         "page": "1",
-        "num_pages": "1",
-        "country": "us",
+        "num_pages": "3",
+        "country": pais.lower(),
         "date_posted": "all"
     }
     headers = {
         "x-rapidapi-key": "44641a4f6cmsh0678bf11e166adap119a54jsn505deef1456f",
         "x-rapidapi-host": "jsearch.p.rapidapi.com"
     }
+
     try:
+        print(f"\n🔍 Buscando empregos para '{profissao}' em '{pais.upper()}'...\n")
         response = requests.get(url, headers=headers, params=querystring)
         response.raise_for_status()
         data = response.json()
         empregos = []
 
         for item in data.get("data", []):
-            profissao = {
+            profissao_item = {
                 "titulo": item.get("job_title", "Não informado"),
                 "empresa": item.get("employer_name", "Desconhecida"),
                 "localizacao": item.get("job_city", "Desconhecida"),
                 "descricao": item.get("job_description", "Sem descrição disponível."),
                 "crescimento": len(item.get("job_description", "")) % 10
             }
-            empregos.append(profissao)
+            empregos.append(profissao_item)
 
         return empregos
 
@@ -193,20 +194,23 @@ def obter_tendencias_emprego():
 # ----------------------------------------------------------
 # Funções auxiliares
 
-def filtrar_profissoes(lista_profissoes, termo):
-    return [p for p in lista_profissoes if termo.lower() in p["titulo"].lower()]
-
-def calcular_crescimento_total(lista, indice=0):
-    if indice == len(lista):
-        return 0
-    return lista[indice]["crescimento"] + calcular_crescimento_total(lista, indice + 1)
-
-def exibir_profissoes(lista):
+def exibir_profissoes_resumidas(lista):
+    """Exibe apenas títulos e empresas (versão resumida)."""
     if not lista:
         print("Nenhuma profissão encontrada.\n")
         return
 
     print("\n=== Profissões Encontradas ===")
+    for i, p in enumerate(lista[:10], start=1):
+        print(f"{i}. {p['titulo']} — {p['empresa']} ({p['localizacao']})")
+
+def exibir_profissoes(lista):
+    """Exibe as profissões completas com detalhes."""
+    if not lista:
+        print("Nenhuma profissão encontrada.\n")
+        return
+
+    print("\n=== Detalhes das Profissões ===")
     for p in lista:
         print(f"\n Título: {p['titulo']}")
         print(f" Empresa: {p['empresa']}")
@@ -214,40 +218,41 @@ def exibir_profissoes(lista):
         print(f" Crescimento estimado: {p['crescimento']}%")
         print(f" Descrição: {p['descricao'][:200]}...\n")
 
-def escolher_profissao(profissoes):
-    opcoes_disponiveis = sorted(set([p["titulo"] for p in profissoes]))
-    print("\n PROFISSÕES DISPONÍVEIS:\n")
-    for i, titulo in enumerate(opcoes_disponiveis[:15], start=1):
-        print(f"{i}. {titulo}")
-    print("\n( Dica: Você pode digitar parte do nome, como 'Python' ou 'Engineer')")
-
-    while True:
-        termo = input("\nDigite o nome (ou parte) da profissão desejada: ").strip()
-        filtradas = filtrar_profissoes(profissoes, termo)
-        if filtradas:
-            return filtradas
-        else:
-            print("\n Profissão não encontrada. Tente novamente.\n")
-            time.sleep(1)
+def calcular_crescimento_total(lista, indice=0):
+    if indice == len(lista):
+        return 0
+    return lista[indice]["crescimento"] + calcular_crescimento_total(lista, indice + 1)
 
 # ----------------------------------------------------------
 # Programa Principal
 
 def main():
-    usuario = menu_inicial()  # menu com login/cadastro/saída
+    usuario = menu_inicial()
     print(f"Acesso liberado para {usuario['nome']} (CPF: {usuario['cpf']})\n")
 
-    print(" Obtendo tendências de emprego...\n")
-    profissoes = obter_tendencias_emprego()
+    while True:
+        profissao_desejada = input("Qual profissão você gostaria de pesquisar (ex: Python Developer, Engineer, etc.)? ").strip()
+        pais_usuario = input("Informe o país para pesquisa (ex: us, br, jp, fr: ").strip()
 
-    if not profissoes:
-        print(" Não foi possível obter dados da API. Verifique sua chave ou conexão.")
-        return
+        profissoes = obter_tendencias_emprego(profissao_desejada, pais_usuario)
 
-    filtradas = escolher_profissao(profissoes)
-    exibir_profissoes(filtradas)
-    total_crescimento = calcular_crescimento_total(filtradas)
-    print(f"\n Crescimento total estimado das profissões filtradas: {total_crescimento}%\n")
+        if not profissoes:
+            print(" Nenhuma profissão encontrada. Tente novamente.\n")
+            continue
+
+        # Mostra prévia das profissões
+        exibir_profissoes_resumidas(profissoes)
+        escolha = input("\nGostaria de filtrar e ver mais detalhes sobre essas profissões? (s/n): ").strip().lower()
+
+        if escolha == "s":
+            exibir_profissoes(profissoes)
+            total_crescimento = calcular_crescimento_total(profissoes)
+            print(f"\n Crescimento total estimado das profissões exibidas: {total_crescimento}%\n")
+            break
+        else:
+            print("\n Ok! Vamos tentar outra profissão.\n")
+            time.sleep(1)
+            continue
 
 # ----------------------------------------------------------
 if __name__ == "__main__":
